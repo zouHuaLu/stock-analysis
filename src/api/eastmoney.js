@@ -100,7 +100,8 @@ function toTencentSymbol(input) {
 
 function scalePrice(value) {
   if (value === undefined || value === null || value === '-' || Number(value) === 0) return null
-  return Number(value) / 100
+  const number = Number(value)
+  return Math.abs(number) > 10000 ? number / 100 : number
 }
 
 function scalePercent(value) {
@@ -267,10 +268,10 @@ async function fetchTencentSnapshot(input) {
 
 export async function fetchStockSnapshot(input) {
   try {
-    return await fetchEastmoneySnapshot(input)
-  } catch (eastmoneyError) {
-    const snapshot = await fetchTencentSnapshot(input)
-    snapshot.fallbackReason = eastmoneyError.message
+    return await fetchTencentSnapshot(input)
+  } catch (tencentError) {
+    const snapshot = await fetchEastmoneySnapshot(input)
+    snapshot.fallbackReason = tencentError.message
     return snapshot
   }
 }

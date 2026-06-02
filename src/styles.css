@@ -289,6 +289,43 @@ input {
   white-space: nowrap;
 }
 
+.period-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(4, minmax(58px, 1fr));
+  gap: 2px;
+  padding: 3px;
+  background: #edf1f5;
+  border: 1px solid #dce5ec;
+  border-radius: 6px;
+}
+
+.period-switch button {
+  min-height: 32px;
+  padding: 0 10px;
+  color: #526579;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.period-switch button.active {
+  color: #0f3e40;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(18, 38, 63, 0.12);
+}
+
+.period-switch button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.compact-error {
+  margin: 0 0 12px;
+}
+
 .chart-wrap {
   overflow: hidden;
   border: 1px solid #edf1f5;
@@ -578,6 +615,10 @@ dd {
 
   .panel-head {
     display: grid;
+  }
+
+  .period-switch {
+    width: 100%;
   }
 
   .chart-title {

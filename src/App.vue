@@ -1,22 +1,32 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { buildAnalysis, buildOpinionScores } from './analysis'
-import { fetchDailyKline, fetchStockSnapshot } from './api/eastmoney'
+import { fetchStockKline, fetchStockSnapshot } from './api/eastmoney'
 import { fetchStockNews } from './api/news'
 import { calculateTechnicalIndicators, formatSignal } from './indicators'
 
 const keyword = ref('600519')
 const loading = ref(false)
+const klineLoading = ref(false)
 const error = ref('')
+const klineError = ref('')
 const stock = ref(null)
 const kline = ref([])
+const activePeriod = ref('day')
 const analysis = ref(null)
 const news = ref([])
 const scores = ref(null)
 const newsError = ref('')
+const periodOptions = [
+  { value: 'minute', label: '分时 K' },
+  { value: 'day', label: '日 K' },
+  { value: 'week', label: '周 K' },
+  { value: 'month', label: '月 K' },
+]
 
 const indicatorRows = computed(() => calculateTechnicalIndicators(kline.value))
-const visibleIndicators = computed(() => indicatorRows.value.slice(-90))
+const visibleCount = computed(() => (activePeriod.value === 'minute' ? 120 : 90))
+const visibleIndicators = computed(() => indicatorRows.value.slice(-visibleCount.value))
 
 const metrics = computed(() => {
   if (!stock.value) return []
@@ -107,6 +117,7 @@ const recentSignals = computed(() => {
 
 async function searchStock() {
   error.value = ''
+  klineError.value = ''
   loading.value = true
   stock.value = null
   kline.value = []
@@ -116,7 +127,7 @@ async function searchStock() {
   newsError.value = ''
 
   try {
-    const [snapshot, history] = await Promise.all([fetchStockSnapshot(keyword.value), fetchDailyKline(keyword.value)])
+    const [snapshot, history] = await Promise.all([fetchStockSnapshot(keyword.value), loadKline(activePeriod.value)])
     stock.value = snapshot
     kline.value = history
     analysis.value = buildAnalysis(snapshot, history)
@@ -131,6 +142,27 @@ async function searchStock() {
     error.value = err.message || '查询失败，请稍后重试。'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadKline(period) {
+  return fetchStockKline(keyword.value, period)
+}
+
+async function changePeriod(period) {
+  if (activePeriod.value === period || klineLoading.value || !stock.value) return
+  activePeriod.value = period
+  klineError.value = ''
+  klineLoading.value = true
+  try {
+    const history = await loadKline(period)
+    kline.value = history
+    analysis.value = buildAnalysis(stock.value, history)
+    scores.value = buildOpinionScores(stock.value, history, news.value)
+  } catch (err) {
+    klineError.value = err.message || 'K 线加载失败。'
+  } finally {
+    klineLoading.value = false
   }
 }
 
@@ -287,16 +319,29 @@ searchStock()
             <p class="eyebrow">Technical View</p>
             <h3>价格、成交量、MACD 与 KDJ</h3>
           </div>
-          <span v-if="chartMeta">{{ chartMeta.start }} - {{ chartMeta.end }}</span>
+          <div class="period-switch" aria-label="K 线周期切换">
+            <button
+              v-for="item in periodOptions"
+              :key="item.value"
+              type="button"
+              :class="{ active: activePeriod === item.value }"
+              :disabled="klineLoading"
+              @click="changePeriod(item.value)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
         </div>
+        <p v-if="klineError" class="error-message compact-error">{{ klineError }}</p>
+        <p v-if="klineLoading" class="muted-text">正在加载 K 线数据...</p>
 
         <div class="indicator-stack">
           <div class="chart-wrap">
             <div class="chart-title">
-              <strong>收盘价趋势</strong>
+              <strong>{{ periodOptions.find((item) => item.value === activePeriod)?.label }} 收盘价趋势</strong>
               <span v-if="chartMeta">高 {{ formatPrice(chartMeta.high) }} / 低 {{ formatPrice(chartMeta.low) }}</span>
             </div>
-            <svg viewBox="0 0 720 260" role="img" aria-label="近 90 日收盘价折线图">
+            <svg viewBox="0 0 720 260" role="img" aria-label="收盘价折线图">
               <line x1="18" y1="40" x2="702" y2="40" />
               <line x1="18" y1="130" x2="702" y2="130" />
               <line x1="18" y1="220" x2="702" y2="220" />
@@ -309,7 +354,7 @@ searchStock()
               <strong>成交量</strong>
               <span>红涨绿跌，按区间最高量归一化</span>
             </div>
-            <svg viewBox="0 0 720 260" role="img" aria-label="近 90 日成交量柱状图">
+            <svg viewBox="0 0 720 260" role="img" aria-label="成交量柱状图">
               <line x1="18" y1="40" x2="702" y2="40" />
               <line x1="18" y1="130" x2="702" y2="130" />
               <line x1="18" y1="220" x2="702" y2="220" />

@@ -64,6 +64,13 @@ const QUOTE_FIELDS = [
 
 const KLINE_FIELDS = ['f51', 'f52', 'f53', 'f54', 'f55', 'f56', 'f57', 'f58', 'f59', 'f60', 'f61']
 
+const PERIOD_CONFIG = {
+  minute: { eastmoneyKlt: '1', tencentPeriod: 'minute', limit: 240, label: '分时' },
+  day: { eastmoneyKlt: '101', tencentPeriod: 'day', limit: 120, label: '日 K' },
+  week: { eastmoneyKlt: '102', tencentPeriod: 'week', limit: 160, label: '周 K' },
+  month: { eastmoneyKlt: '103', tencentPeriod: 'month', limit: 180, label: '月 K' },
+}
+
 export function normalizeCode(input) {
   return String(input || '')
     .trim()
@@ -153,6 +160,36 @@ function parseTencentKline(row) {
     changePercent,
     change,
     turnover: null,
+  }
+}
+
+function parseTencentMinute(row, index, rows, tradeDate) {
+  const [time, priceText, volumeText, amountText] = row.split(' ')
+  const price = Number(priceText)
+  const previous = index > 0 ? Number(rows[index - 1].split(' ')[1]) : price
+  const volume = Number(volumeText) - (index > 0 ? Number(rows[index - 1].split(' ')[2]) : 0)
+  const amount = Number(amountText) - (index > 0 ? Number(rows[index - 1].split(' ')[3]) : 0)
+
+  return {
+    date: `${tradeDate || ''} ${time.slice(0, 2)}:${time.slice(2)}`.trim(),
+    open: previous,
+    close: price,
+    high: Math.max(previous, price),
+    low: Math.min(previous, price),
+    volume: Math.max(0, volume),
+    amount: Math.max(0, amount),
+    amplitude: null,
+    changePercent: previous ? ((price - previous) / previous) * 100 : null,
+    change: price - previous,
+    turnover: null,
+  }
+}
+
+function getPeriodConfig(period, days) {
+  const config = PERIOD_CONFIG[period] || PERIOD_CONFIG.day
+  return {
+    ...config,
+    limit: days || config.limit,
   }
 }
 
@@ -276,17 +313,18 @@ export async function fetchStockSnapshot(input) {
   }
 }
 
-async function fetchEastmoneyKline(input, days) {
+async function fetchEastmoneyKline(input, period, days) {
   const secid = toSecId(input)
+  const config = getPeriodConfig(period, days)
   const query = new URLSearchParams({
     secid,
-    klt: '101',
+    klt: config.eastmoneyKlt,
     fqt: '1',
     beg: '0',
     end: '20500000',
     fields1: 'f1,f2,f3,f4,f5,f6',
     fields2: KLINE_FIELDS.join(','),
-    lmt: String(days),
+    lmt: String(config.limit),
   })
 
   const response = await fetch(`/em-history/api/qt/stock/kline/get?${query}`)
@@ -297,24 +335,42 @@ async function fetchEastmoneyKline(input, days) {
   return rows.map(parseKline)
 }
 
-async function fetchTencentKline(input, days) {
+async function fetchTencentKline(input, period, days) {
   const symbol = toTencentSymbol(input)
+  const config = getPeriodConfig(period, days)
+  if (period === 'minute') return fetchTencentMinuteKline(symbol)
+
   const query = new URLSearchParams({
-    param: `${symbol},day,,,${days},qfq`,
+    param: `${symbol},${config.tencentPeriod},,,${config.limit},qfq`,
   })
   const response = await fetch(`/tencent-stock/appstock/app/fqkline/get?${query}`)
   if (!response.ok) throw new Error(`备用 K 线接口请求失败：${response.status}`)
 
   const payload = await response.json()
   const data = payload?.data?.[symbol]
-  const rows = data?.qfqday || data?.day || []
+  const rows = data?.[`qfq${config.tencentPeriod}`] || data?.[config.tencentPeriod] || data?.qfqday || data?.day || []
   return rows.map(parseTencentKline)
 }
 
-export async function fetchDailyKline(input, days = 120) {
+async function fetchTencentMinuteKline(symbol) {
+  const query = new URLSearchParams({ code: symbol })
+  const response = await fetch(`/tencent-stock/appstock/app/minute/query?${query}`)
+  if (!response.ok) throw new Error(`分时 K 线接口请求失败：${response.status}`)
+
+  const payload = await response.json()
+  const data = payload?.data?.[symbol]?.data
+  const rows = data?.data || []
+  return rows.map((row, index) => parseTencentMinute(row, index, rows, data?.date))
+}
+
+export async function fetchStockKline(input, period = 'day', days) {
   try {
-    return await fetchEastmoneyKline(input, days)
+    return await fetchEastmoneyKline(input, period, days)
   } catch {
-    return fetchTencentKline(input, days)
+    return fetchTencentKline(input, period, days)
   }
+}
+
+export function fetchDailyKline(input, days = 120) {
+  return fetchStockKline(input, 'day', days)
 }

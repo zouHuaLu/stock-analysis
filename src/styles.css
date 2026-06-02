@@ -296,10 +296,37 @@ input {
   background: #fbfcfd;
 }
 
+.indicator-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.chart-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.chart-title strong {
+  font-size: 14px;
+}
+
+.chart-title span {
+  color: #6b7e90;
+  font-size: 12px;
+}
+
 .chart-wrap svg {
   display: block;
   width: 100%;
   min-height: 260px;
+}
+
+.compact-chart svg {
+  min-height: 210px;
 }
 
 .chart-wrap line {
@@ -309,18 +336,80 @@ input {
 
 .chart-wrap polyline {
   fill: none;
-  stroke: #0d6f73;
   stroke-linecap: round;
   stroke-linejoin: round;
+  stroke-width: 2.4;
+}
+
+.price-line {
+  stroke: #0d6f73;
   stroke-width: 3;
 }
 
-.chart-meta {
-  display: flex;
-  gap: 16px;
-  margin-top: 12px;
-  color: #5c6f81;
+.dif-line,
+.k-line {
+  stroke: #2166ac;
+}
+
+.dea-line,
+.d-line {
+  stroke: #b66b00;
+}
+
+.j-line {
+  stroke: #5d6470;
+}
+
+.chart-wrap rect.up {
+  fill: rgba(192, 57, 43, 0.68);
+}
+
+.chart-wrap rect.down {
+  fill: rgba(19, 138, 87, 0.68);
+}
+
+.chart-wrap circle {
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.chart-wrap circle.golden {
+  fill: #c0392b;
+}
+
+.chart-wrap circle.death {
+  fill: #138a57;
+}
+
+.chart-wrap text {
+  fill: #304456;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.signal-table {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  color: #526579;
+  background: #fbfcfd;
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
   font-size: 13px;
+}
+
+.signal-table strong {
+  color: #1d2733;
+}
+
+.signal-table div {
+  display: grid;
+  gap: 8px;
+}
+
+.signal-table p {
+  margin: 0;
 }
 
 .summary {
@@ -488,6 +577,10 @@ dd {
   }
 
   .panel-head {
+    display: grid;
+  }
+
+  .chart-title {
     display: grid;
   }
 }

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { buildAnalysis, buildOpinionScores } from './analysis'
 import { fetchDailyKline, fetchStockSnapshot } from './api/eastmoney'
 import { fetchStockNews } from './api/news'
+import { calculateTechnicalIndicators, formatSignal } from './indicators'
 
 const keyword = ref('600519')
 const loading = ref(false)
@@ -13,6 +14,9 @@ const analysis = ref(null)
 const news = ref([])
 const scores = ref(null)
 const newsError = ref('')
+
+const indicatorRows = computed(() => calculateTechnicalIndicators(kline.value))
+const visibleIndicators = computed(() => indicatorRows.value.slice(-90))
 
 const metrics = computed(() => {
   if (!stock.value) return []
@@ -29,27 +33,13 @@ const metrics = computed(() => {
 })
 
 const chartPoints = computed(() => {
-  const rows = kline.value.slice(-90)
+  const rows = visibleIndicators.value
   if (!rows.length) return ''
-  const width = 720
-  const height = 260
-  const padding = 18
-  const values = rows.map((item) => item.close)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min || 1
-
-  return rows
-    .map((item, index) => {
-      const x = padding + (index / Math.max(rows.length - 1, 1)) * (width - padding * 2)
-      const y = height - padding - ((item.close - min) / range) * (height - padding * 2)
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(' ')
+  return linePoints(rows, (item) => item.close, chartScale(rows, [(item) => item.close]))
 })
 
 const chartMeta = computed(() => {
-  const rows = kline.value.slice(-90)
+  const rows = visibleIndicators.value
   if (!rows.length) return null
   const closes = rows.map((item) => item.close)
   return {
@@ -58,6 +48,61 @@ const chartMeta = computed(() => {
     high: Math.max(...closes),
     low: Math.min(...closes),
   }
+})
+
+const volumeBars = computed(() => {
+  const rows = visibleIndicators.value
+  if (!rows.length) return []
+  const max = Math.max(...rows.map((item) => item.volume || 0)) || 1
+  return rows.map((item, index) => {
+    const x = 18 + (index / rows.length) * 684
+    const width = Math.max(2, 684 / rows.length - 2)
+    const height = ((item.volume || 0) / max) * 212
+    return {
+      x: x.toFixed(1),
+      y: (238 - height).toFixed(1),
+      width: width.toFixed(1),
+      height: height.toFixed(1),
+      tone: item.close >= item.open ? 'up' : 'down',
+    }
+  })
+})
+
+const macdChart = computed(() => {
+  const rows = visibleIndicators.value
+  if (!rows.length) return null
+  const scale = chartScale(rows, [(item) => item.dif, (item) => item.dea, (item) => item.macd])
+  return {
+    dif: linePoints(rows, (item) => item.dif, scale),
+    dea: linePoints(rows, (item) => item.dea, scale),
+    bars: histogramBars(rows, (item) => item.macd, scale),
+    markers: signalMarkers(rows, (item) => item.macdSignal, scale, (item) => item.dif),
+  }
+})
+
+const kdjChart = computed(() => {
+  const rows = visibleIndicators.value
+  if (!rows.length) return null
+  const scale = chartScale(rows, [(item) => item.k, (item) => item.d, (item) => item.j])
+  return {
+    k: linePoints(rows, (item) => item.k, scale),
+    d: linePoints(rows, (item) => item.d, scale),
+    j: linePoints(rows, (item) => item.j, scale),
+    markers: signalMarkers(rows, (item) => item.kdjSignal, scale, (item) => item.k),
+  }
+})
+
+const recentSignals = computed(() => {
+  return indicatorRows.value
+    .filter((item) => item.macdSignal || item.kdjSignal)
+    .slice(-8)
+    .reverse()
+    .map((item) => ({
+      date: item.date,
+      macd: formatSignal(item.macdSignal),
+      kdj: formatSignal(item.kdjSignal),
+      close: item.close,
+    }))
 })
 
 async function searchStock() {
@@ -116,6 +161,58 @@ function numberTone(value) {
   if (value > 0) return 'up'
   if (value < 0) return 'down'
   return ''
+}
+
+function chartScale(rows, accessors) {
+  const values = rows.flatMap((item) => accessors.map((accessor) => accessor(item))).filter(Number.isFinite)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const padding = (max - min || 1) * 0.12
+  return {
+    min: min - padding,
+    max: max + padding,
+  }
+}
+
+function chartX(index, total) {
+  return 18 + (index / Math.max(total - 1, 1)) * 684
+}
+
+function chartY(value, scale) {
+  const range = scale.max - scale.min || 1
+  return 238 - ((value - scale.min) / range) * 216
+}
+
+function linePoints(rows, accessor, scale) {
+  return rows
+    .map((item, index) => `${chartX(index, rows.length).toFixed(1)},${chartY(accessor(item), scale).toFixed(1)}`)
+    .join(' ')
+}
+
+function histogramBars(rows, accessor, scale) {
+  const zero = chartY(0, scale)
+  return rows.map((item, index) => {
+    const value = accessor(item)
+    const y = chartY(value, scale)
+    return {
+      x: (18 + (index / rows.length) * 684).toFixed(1),
+      y: Math.min(y, zero).toFixed(1),
+      width: Math.max(2, 684 / rows.length - 2).toFixed(1),
+      height: Math.max(1, Math.abs(zero - y)).toFixed(1),
+      tone: value >= 0 ? 'up' : 'down',
+    }
+  })
+}
+
+function signalMarkers(rows, signalAccessor, scale, valueAccessor) {
+  return rows
+    .map((item, index) => ({
+      type: signalAccessor(item),
+      date: item.date,
+      x: chartX(index, rows.length).toFixed(1),
+      y: chartY(valueAccessor(item), scale).toFixed(1),
+    }))
+    .filter((item) => item.type)
 }
 
 searchStock()
@@ -187,24 +284,105 @@ searchStock()
       <article class="panel chart-panel">
         <div class="panel-head">
           <div>
-            <p class="eyebrow">90 日走势</p>
-            <h3>收盘价趋势</h3>
+            <p class="eyebrow">Technical View</p>
+            <h3>价格、成交量、MACD 与 KDJ</h3>
           </div>
           <span v-if="chartMeta">{{ chartMeta.start }} - {{ chartMeta.end }}</span>
         </div>
 
-        <div class="chart-wrap">
-          <svg viewBox="0 0 720 260" role="img" aria-label="近 90 日收盘价折线图">
-            <line x1="18" y1="40" x2="702" y2="40" />
-            <line x1="18" y1="130" x2="702" y2="130" />
-            <line x1="18" y1="220" x2="702" y2="220" />
-            <polyline :points="chartPoints" />
-          </svg>
+        <div class="indicator-stack">
+          <div class="chart-wrap">
+            <div class="chart-title">
+              <strong>收盘价趋势</strong>
+              <span v-if="chartMeta">高 {{ formatPrice(chartMeta.high) }} / 低 {{ formatPrice(chartMeta.low) }}</span>
+            </div>
+            <svg viewBox="0 0 720 260" role="img" aria-label="近 90 日收盘价折线图">
+              <line x1="18" y1="40" x2="702" y2="40" />
+              <line x1="18" y1="130" x2="702" y2="130" />
+              <line x1="18" y1="220" x2="702" y2="220" />
+              <polyline class="price-line" :points="chartPoints" />
+            </svg>
+          </div>
+
+          <div class="chart-wrap compact-chart">
+            <div class="chart-title">
+              <strong>成交量</strong>
+              <span>红涨绿跌，按区间最高量归一化</span>
+            </div>
+            <svg viewBox="0 0 720 260" role="img" aria-label="近 90 日成交量柱状图">
+              <line x1="18" y1="40" x2="702" y2="40" />
+              <line x1="18" y1="130" x2="702" y2="130" />
+              <line x1="18" y1="220" x2="702" y2="220" />
+              <rect
+                v-for="(bar, index) in volumeBars"
+                :key="index"
+                :class="bar.tone"
+                :x="bar.x"
+                :y="bar.y"
+                :width="bar.width"
+                :height="bar.height"
+              />
+            </svg>
+          </div>
+
+          <div v-if="macdChart" class="chart-wrap compact-chart">
+            <div class="chart-title">
+              <strong>MACD</strong>
+              <span>DIF / DEA / MACD 柱</span>
+            </div>
+            <svg viewBox="0 0 720 260" role="img" aria-label="MACD 指标图">
+              <line x1="18" y1="130" x2="702" y2="130" />
+              <rect
+                v-for="(bar, index) in macdChart.bars"
+                :key="index"
+                :class="bar.tone"
+                :x="bar.x"
+                :y="bar.y"
+                :width="bar.width"
+                :height="bar.height"
+              />
+              <polyline class="dif-line" :points="macdChart.dif" />
+              <polyline class="dea-line" :points="macdChart.dea" />
+              <g v-for="marker in macdChart.markers" :key="`${marker.date}-${marker.type}`">
+                <circle :class="marker.type" :cx="marker.x" :cy="marker.y" r="5" />
+                <text :x="marker.x" :y="Number(marker.y) - 10" text-anchor="middle">
+                  {{ formatSignal(marker.type) }}
+                </text>
+              </g>
+            </svg>
+          </div>
+
+          <div v-if="kdjChart" class="chart-wrap compact-chart">
+            <div class="chart-title">
+              <strong>KDJ</strong>
+              <span>K / D / J</span>
+            </div>
+            <svg viewBox="0 0 720 260" role="img" aria-label="KDJ 指标图">
+              <line x1="18" y1="80" x2="702" y2="80" />
+              <line x1="18" y1="130" x2="702" y2="130" />
+              <line x1="18" y1="180" x2="702" y2="180" />
+              <polyline class="k-line" :points="kdjChart.k" />
+              <polyline class="d-line" :points="kdjChart.d" />
+              <polyline class="j-line" :points="kdjChart.j" />
+              <g v-for="marker in kdjChart.markers" :key="`${marker.date}-${marker.type}`">
+                <circle :class="marker.type" :cx="marker.x" :cy="marker.y" r="5" />
+                <text :x="marker.x" :y="Number(marker.y) - 10" text-anchor="middle">
+                  {{ formatSignal(marker.type) }}
+                </text>
+              </g>
+            </svg>
+          </div>
         </div>
 
-        <div v-if="chartMeta" class="chart-meta">
-          <span>区间高点 {{ formatPrice(chartMeta.high) }}</span>
-          <span>区间低点 {{ formatPrice(chartMeta.low) }}</span>
+        <div class="signal-table">
+          <strong>最近交叉信号</strong>
+          <div v-if="recentSignals.length">
+            <span v-for="item in recentSignals" :key="`${item.date}-${item.macd}-${item.kdj}`">
+              {{ item.date }} 收盘 {{ formatPrice(item.close) }} · MACD {{ item.macd || '--' }} · KDJ
+              {{ item.kdj || '--' }}
+            </span>
+          </div>
+          <p v-else>近 90 日暂无 MACD 或 KDJ 交叉信号。</p>
         </div>
       </article>
 

@@ -4,6 +4,7 @@ import { buildAnalysis, buildOpinionScores } from './analysis'
 import { fetchStockKline, fetchStockSnapshot } from './api/eastmoney'
 import { fetchStockNews } from './api/news'
 import { calculateTechnicalIndicators, formatSignal } from './indicators'
+import { buildTradePlan } from './tradePlan'
 
 const keyword = ref('600519')
 const loading = ref(false)
@@ -114,6 +115,8 @@ const recentSignals = computed(() => {
       close: item.close,
     }))
 })
+
+const tradePlan = computed(() => buildTradePlan(indicatorRows.value, activePeriod.value))
 
 async function searchStock() {
   error.value = ''
@@ -445,6 +448,40 @@ searchStock()
             <p>{{ item.text }}</p>
           </div>
         </div>
+      </article>
+
+      <article class="panel trade-plan-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Tomorrow Plan</p>
+            <h3>明日买卖点分析</h3>
+          </div>
+        </div>
+        <div class="trade-stance">
+          <span>短线倾向</span>
+          <strong>{{ tradePlan.stance }}</strong>
+          <p>{{ tradePlan.summary }}</p>
+        </div>
+
+        <div v-if="tradePlan.available" class="ma-row">
+          <span>MA5 {{ formatPrice(tradePlan.movingAverages.ma5) }}</span>
+          <span>MA10 {{ formatPrice(tradePlan.movingAverages.ma10) }}</span>
+          <span>MA20 {{ formatPrice(tradePlan.movingAverages.ma20) }}</span>
+          <span>MA60 {{ formatPrice(tradePlan.movingAverages.ma60) }}</span>
+        </div>
+
+        <div v-if="tradePlan.available" class="trade-levels">
+          <div v-for="item in tradePlan.levels" :key="item.label">
+            <span>{{ item.label }}</span>
+            <strong>{{ formatPrice(item.value) }}</strong>
+            <p>{{ item.note }}</p>
+          </div>
+        </div>
+
+        <ul v-if="tradePlan.reasons.length" class="trade-reasons">
+          <li v-for="item in tradePlan.reasons" :key="item">{{ item }}</li>
+        </ul>
+        <p class="trade-disclaimer">规则模型输出，仅供复盘和交易计划参考，不构成投资建议。</p>
       </article>
     </section>
 

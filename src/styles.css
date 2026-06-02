@@ -265,6 +265,10 @@ input {
   margin-top: 16px;
 }
 
+.chart-panel {
+  grid-row: span 2;
+}
+
 .panel {
   padding: 20px;
 }
@@ -474,6 +478,89 @@ input {
   line-height: 1.7;
 }
 
+.trade-plan-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.trade-stance {
+  padding: 14px;
+  background: #f7fbfa;
+  border: 1px solid #dcebe8;
+  border-radius: 6px;
+}
+
+.trade-stance span,
+.trade-levels span {
+  color: #617487;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.trade-stance strong {
+  display: block;
+  margin-top: 6px;
+  color: #0f3e40;
+  font-size: 20px;
+}
+
+.trade-stance p,
+.trade-levels p {
+  margin: 8px 0 0;
+  color: #526579;
+  line-height: 1.65;
+}
+
+.ma-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ma-row span {
+  padding: 8px 10px;
+  color: #304456;
+  background: #fbfcfd;
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.trade-levels {
+  display: grid;
+  gap: 10px;
+}
+
+.trade-levels div {
+  padding: 12px;
+  background: #fbfcfd;
+  border: 1px solid #edf1f5;
+  border-radius: 6px;
+}
+
+.trade-levels strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 24px;
+}
+
+.trade-reasons {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: #526579;
+  line-height: 1.6;
+}
+
+.trade-disclaimer {
+  margin: 0;
+  color: #8a6670;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
@@ -568,6 +655,10 @@ dd {
   .content-grid,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-panel {
+    grid-row: auto;
   }
 
   .query-band {
